@@ -67,7 +67,7 @@ Other %-codes will cause an error."
 }
 
 #[derive(Debug)]
-struct ParseHexError<'a> {
+pub struct ParseHexError<'a> {
     reason: String,
     source: &'a str,
 }
@@ -86,7 +86,7 @@ fn parse_hex_slice(slice: &str) -> Result<u32, ParseHexError> {
 }
 
 /// Parse an HTML-color-like hex input
-fn parse_hex(hex: &str) -> Result<u32, ParseHexError> {
+pub fn parse_hex(hex: &str) -> Result<u32, ParseHexError> {
     let hex = hex.trim_start_matches('#');
     let mut color;
 

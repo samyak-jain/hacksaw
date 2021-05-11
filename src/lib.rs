@@ -1,13 +1,11 @@
 extern crate structopt;
 extern crate xcb;
-mod lib;
+mod util;
 
-use lib::parse_args::Opt;
-use lib::{
+use util::{
     find_escape_keycode, get_window_at_point, get_window_geom, grab_key, grab_pointer_set_cursor,
     set_shape, set_title, ungrab_key, HacksawResult, CURSOR_GRAB_TRIES,
 };
-use structopt::StructOpt;
 
 fn min_max(a: i16, b: i16) -> (i16, i16) {
     if a < b {
@@ -29,13 +27,31 @@ fn build_guides(screen: xcb::Rectangle, pt: xcb::Point, width: u16) -> [xcb::Rec
     ]
 }
 
-fn main() -> Result<(), String> {
-    let opt = Opt::from_args();
+pub struct HackSawConfig {
+    line_width: u16,
+    guide_width: u16,
+    line_colour: u32,
+    format: util::parse_format::Format,
+    remove_decorations: u32,
+}
 
-    let line_width = opt.select_thickness;
-    let guide_width = opt.guide_thickness;
-    let line_colour = opt.line_colour;
-    let format = opt.format;
+impl Default for HackSawConfig {
+    fn default() -> Self {
+        Self {
+            line_width: 1,
+            guide_width: 1,
+            line_colour: util::parse_args::parse_hex("#7f7f7f").unwrap(),
+            format: util::parse_format::parse_format_string("%g").unwrap(),
+            remove_decorations: 0,
+        }
+    }
+}
+
+pub fn launch_default(config: Option<HackSawConfig>, no_guides: bool) -> String {
+    let opt = match config {
+        Some(c) => c,
+        None => HackSawConfig::default(),
+    };
 
     let (conn, screen_num) = xcb::Connection::connect(None).unwrap();
     let setup = conn.get_setup();
@@ -61,7 +77,7 @@ fn main() -> Result<(), String> {
     // TODO event handling for expose/keypress
     let values = [
         // ?RGB. First 4 bytes appear to do nothing
-        (xcb::CW_BACK_PIXEL, line_colour),
+        (xcb::CW_BACK_PIXEL, opt.line_colour),
         (
             xcb::CW_EVENT_MASK,
             xcb::EVENT_MASK_EXPOSURE
@@ -93,7 +109,7 @@ fn main() -> Result<(), String> {
 
     xcb::map_window(&conn, window);
 
-    if !opt.no_guides {
+    if !no_guides {
         let pointer = xcb::query_pointer(&conn, root).get_reply().unwrap();
         set_shape(
             &conn,
@@ -101,7 +117,7 @@ fn main() -> Result<(), String> {
             &build_guides(
                 screen_rect,
                 xcb::Point::new(pointer.root_x(), pointer.root_y()),
-                guide_width,
+                opt.guide_width,
             ),
         );
     }
@@ -161,31 +177,31 @@ fn main() -> Result<(), String> {
                     let rects = [
                         // Selection rectangle
                         xcb::Rectangle::new(
-                            left_x - line_width as i16,
+                            left_x - opt.line_width as i16,
                             top_y,
-                            line_width,
-                            height + line_width,
+                            opt.line_width,
+                            height + opt.line_width,
                         ),
                         xcb::Rectangle::new(
-                            left_x - line_width as i16,
-                            top_y - line_width as i16,
-                            width + line_width,
-                            line_width,
+                            left_x - opt.line_width as i16,
+                            top_y - opt.line_width as i16,
+                            width + opt.line_width,
+                            opt.line_width,
                         ),
                         xcb::Rectangle::new(
                             right_x,
-                            top_y - line_width as i16,
-                            line_width,
-                            height + line_width,
+                            top_y - opt.line_width as i16,
+                            opt.line_width,
+                            height + opt.line_width,
                         ),
-                        xcb::Rectangle::new(left_x, bottom_y, width + line_width, line_width),
+                        xcb::Rectangle::new(left_x, bottom_y, width + opt.line_width, opt.line_width),
                     ];
                     set_shape(&conn, window, &rects);
-                } else if !opt.no_guides {
+                } else if !no_guides {
                     let rects = build_guides(
                         screen_rect,
                         xcb::Point::new(motion.event_x(), motion.event_y()),
-                        guide_width,
+                        opt.guide_width,
                     );
 
                     set_shape(&conn, window, &rects);
@@ -248,7 +264,5 @@ fn main() -> Result<(), String> {
     }
 
     // Now we have taken coordinates, we print them out
-    println!("{}", result.fill_format_string(&format));
-
-    Ok(())
+    result.fill_format_string(&opt.format)
 }
