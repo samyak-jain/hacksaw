@@ -47,7 +47,7 @@ impl Default for HackSawConfig {
     }
 }
 
-pub fn launch_default(config: Option<HackSawConfig>, no_guides: bool) -> String {
+pub fn launch_default(config: Option<HackSawConfig>, no_guides: bool) -> Result<String, String> {
     let opt = match config {
         Some(c) => c,
         None => HackSawConfig::default(),
@@ -264,5 +264,5 @@ pub fn launch_default(config: Option<HackSawConfig>, no_guides: bool) -> String 
     }
 
     // Now we have taken coordinates, we print them out
-    result.fill_format_string(&opt.format)
+    Ok(result.fill_format_string(&opt.format))
 }
