@@ -1,11 +1,9 @@
-mod lib;
+mod util;
 
-use lib::parse_args::Opt;
-use lib::{
+use util::{
     find_escape_keycode, get_window_at_point, get_window_geom, grab_key, grab_pointer_set_cursor,
-    set_shape, set_title, ungrab_key, HacksawResult, CURSOR_GRAB_TRIES,
+    set_shape, set_title, ungrab_key, HacksawContainer, CURSOR_GRAB_TRIES,
 };
-use structopt::StructOpt;
 use x11rb::connection::Connection;
 use x11rb::protocol::{xproto, Event};
 
@@ -26,7 +24,7 @@ fn build_guides(
         xproto::Rectangle {
             x: pt.x - width as i16 / 2,
             y: screen.x,
-            width: width,
+            width,
             height: screen.height,
         },
         xproto::Rectangle {
@@ -38,13 +36,39 @@ fn build_guides(
     ]
 }
 
-fn main() -> Result<(), String> {
-    let opt = Opt::from_args();
+pub struct HackSawConfig {
+    line_width: u16,
+    guide_width: Option<u16>,
+    line_colour: u32,
+    remove_decorations: u32,
+}
 
-    let line_width = opt.select_thickness;
-    let guide_width = opt.guide_thickness;
-    let line_colour = opt.line_colour;
-    let format = opt.format;
+impl Default for HackSawConfig {
+    fn default() -> Self {
+        Self {
+            line_width: 1,
+            guide_width: Some(1),
+            line_colour: util::parse_args::parse_hex("#7f7f7f").unwrap(),
+            remove_decorations: 0,
+        }
+    }
+}
+
+
+#[derive(Debug)]
+pub struct HackSawResult {
+    pub window: u32,
+    pub width: u16,
+    pub height: u16,
+    pub x: i16,
+    pub y: i16,
+}
+
+pub fn make_selection(config: Option<HackSawConfig>) -> Result<HackSawResult, String> {
+    let opt = match config {
+        Some(c) => c,
+        None => HackSawConfig::default(),
+    };
 
     let (conn, screen_num) = x11rb::rust_connection::RustConnection::connect(None).unwrap();
     let setup = conn.setup();
@@ -73,7 +97,7 @@ fn main() -> Result<(), String> {
 
     // TODO event handling for expose/keypress
     let value_list = xproto::CreateWindowAux::new()
-        .background_pixel(line_colour)
+        .background_pixel(opt.line_colour)
         .event_mask(
             xproto::EventMask::Exposure
                 | xproto::EventMask::KeyPress
@@ -115,7 +139,7 @@ fn main() -> Result<(), String> {
 
     xproto::map_window(&conn, window).unwrap().check().unwrap();
 
-    if !opt.no_guides {
+    if let Some(guide_width) = opt.guide_width {
         let pointer = xproto::query_pointer(&conn, root).unwrap().reply().unwrap();
         set_shape(
             &conn,
@@ -200,33 +224,33 @@ fn main() -> Result<(), String> {
                     let rects = [
                         // Selection rectangle
                         xproto::Rectangle {
-                            x: left_x - line_width as i16,
+                            x: left_x - opt.line_width as i16,
                             y: top_y,
-                            width: line_width,
-                            height: height + line_width,
+                            width: opt.line_width,
+                            height: height + opt.line_width,
                         },
                         xproto::Rectangle {
-                            x: left_x - line_width as i16,
-                            y: top_y - line_width as i16,
-                            width: width + line_width,
-                            height: line_width,
+                            x: left_x - opt.line_width as i16,
+                            y: top_y - opt.line_width as i16,
+                            width: width + opt.line_width,
+                            height: opt.line_width,
                         },
                         xproto::Rectangle {
                             x: right_x,
-                            y: top_y - line_width as i16,
-                            width: line_width,
-                            height: height + line_width,
+                            y: top_y - opt.line_width as i16,
+                            width: opt.line_width,
+                            height: height + opt.line_width,
                         },
                         xproto::Rectangle {
                             x: left_x,
                             y: bottom_y,
-                            width: width + line_width,
-                            height: line_width,
+                            width: width + opt.line_width,
+                            height: opt.line_width,
                         },
                     ];
 
                     set_shape(&conn, window, &rects);
-                } else if !opt.no_guides {
+                } else if let Some(guide_width) = opt.guide_width {
                     let rects = build_guides(
                         screen_rect,
                         xproto::Point {
@@ -294,14 +318,17 @@ fn main() -> Result<(), String> {
             None => get_window_geom(&conn, screen.root),
         }
     } else {
-        result = HacksawResult {
+        result = HacksawContainer {
             window: root,
             rect: selection,
         };
     }
 
-    // Now we have taken coordinates, we print them out
-    println!("{}", result.fill_format_string(&format));
-
-    Ok(())
+    Ok(HackSawResult{
+        window: result.window,
+        height: result.height(),
+        width: result.width(),
+        x: result.x(),
+        y: result.y(),
+    })
 }

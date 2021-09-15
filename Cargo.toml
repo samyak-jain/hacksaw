@@ -10,6 +10,14 @@ readme = "README.md"
 keywords = ["x11", "screenshot", "selection", "nexromancers"]
 edition = "2018"
 
+[lib]
+name = "hacksaw"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hacksaw-cli"
+path = "src/bin/example.rs"
+
 [dependencies]
 structopt = "0.3"
 

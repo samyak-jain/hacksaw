@@ -1,7 +1,6 @@
 pub mod parse_args;
 pub mod parse_format;
 
-use self::parse_format::FormatToken;
 use x11rb::connection::Connection;
 use x11rb::protocol::shape;
 use x11rb::protocol::xproto;
@@ -17,12 +16,12 @@ const ESC_KEYSYM: u32 = 0xff1b;
 const KEY_GRAB_MASK_MAX: u16 = (xproto::ModMask::M5 as u16 * 2) - 1;
 
 #[derive(Clone, Copy)]
-pub struct HacksawResult {
+pub struct HacksawContainer {
     pub window: u32,
     pub rect: xproto::Rectangle,
 }
 
-impl HacksawResult {
+impl HacksawContainer {
     pub fn x(&self) -> i16 {
         self.rect.x
     }
@@ -36,8 +35,8 @@ impl HacksawResult {
         self.rect.height
     }
 
-    pub fn relative_to(&self, parent: HacksawResult) -> HacksawResult {
-        HacksawResult {
+    pub fn relative_to(&self, parent: HacksawContainer) -> HacksawContainer {
+        HacksawContainer {
             window: self.window,
             rect: xproto::Rectangle {
                 x: parent.x() + self.x(),
@@ -54,28 +53,6 @@ impl HacksawResult {
             && self.y() < point.y
             && point.x - self.x() <= self.width() as i16
             && point.y - self.y() <= self.height() as i16
-    }
-
-    pub fn fill_format_string(&self, format: &[FormatToken]) -> String {
-        format
-            .iter()
-            .map(|token| match token {
-                FormatToken::WindowId => self.window.to_string(),
-                FormatToken::Geometry => format!(
-                    "{}x{}+{}+{}",
-                    self.width(),
-                    self.height(),
-                    self.x(),
-                    self.y(),
-                ),
-                FormatToken::Width => self.width().to_string(),
-                FormatToken::Height => self.height().to_string(),
-                FormatToken::X => self.x().to_string(),
-                FormatToken::Y => self.y().to_string(),
-                FormatToken::Literal(s) => s.to_string(),
-            })
-            .collect::<Vec<_>>()
-            .join("")
     }
 }
 
@@ -216,10 +193,10 @@ pub fn input_output<C: Connection>(conn: &C, win: xproto::Window) -> bool {
     attrs.class == xproto::WindowClass::InputOutput
 }
 
-pub fn get_window_geom<C: Connection>(conn: &C, win: xproto::Window) -> HacksawResult {
+pub fn get_window_geom<C: Connection>(conn: &C, win: xproto::Window) -> HacksawContainer {
     let geom = xproto::get_geometry(conn, win).unwrap().reply().unwrap();
 
-    HacksawResult {
+    HacksawContainer {
         window: win,
         rect: xproto::Rectangle {
             x: geom.x,
@@ -235,7 +212,7 @@ pub fn get_window_at_point<C: Connection>(
     win: xproto::Window,
     pt: xproto::Point,
     remove_decorations: u32,
-) -> Option<HacksawResult> {
+) -> Option<HacksawContainer> {
     let tree = xproto::query_tree(conn, win).unwrap().reply().unwrap();
     let children = tree
         .children
