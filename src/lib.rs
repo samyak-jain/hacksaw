@@ -88,23 +88,9 @@ pub fn make_selection(config: Option<HackSawConfig>) -> Result<HackSawResult, St
         None => HackSawConfig::default(),
     };
 
-    let (conn, screen_num) = x11rb::rust_connection::RustConnection::connect(None).unwrap();
-    let setup = conn.setup();
-    let screen = &setup.roots[screen_num];
-    let root = screen.root;
-
-    let window = conn.generate_id().unwrap();
-
-    // TODO fix pointer-grab? bug where hacksaw hangs if mouse held down before run
-    if !grab_pointer_set_cursor(&conn, root) {
-        return Err(format!(
-            "Failed to grab cursor after {} tries, giving up",
-            CURSOR_GRAB_TRIES
-        ));
-    }
-
-    let escape_keycode = find_escape_keycode(&conn);
-    grab_key(&conn, root, escape_keycode);
+    let conn = x11::new_connection();
+    conn.grab_cursor();
+    conn.grab_key(conn.get_escape_keycode().unwrap());
 
     let screen_rect = xproto::Rectangle {
         x: 0,
@@ -113,36 +99,7 @@ pub fn make_selection(config: Option<HackSawConfig>) -> Result<HackSawResult, St
         height: screen.height_in_pixels,
     };
 
-    // TODO event handling for expose/keypress
-    let value_list = xproto::CreateWindowAux::new()
-        .background_pixel(opt.line_colour)
-        .event_mask(
-            xproto::EventMask::Exposure
-                | xproto::EventMask::KeyPress
-                | xproto::EventMask::StructureNotify
-                | xproto::EventMask::SubstructureNotify,
-        )
-        .override_redirect(1);
-
-    xproto::create_window(
-        &conn,
-        x11rb::COPY_DEPTH_FROM_PARENT,
-        window,
-        root,
-        screen_rect.x,
-        screen_rect.y,
-        screen_rect.width,
-        screen_rect.height,
-        0,
-        xproto::WindowClass::InputOutput,
-        screen.root_visual,
-        &value_list,
-    )
-    .unwrap()
-    .check()
-    .unwrap();
-
-    set_title(&conn, window, "hacksaw");
+    conn.create_window(opt.line_colour);
 
     set_shape(
         &conn,

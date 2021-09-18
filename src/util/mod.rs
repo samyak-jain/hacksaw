@@ -2,14 +2,7 @@ use x11rb::connection::Connection;
 use x11rb::protocol::shape;
 use x11rb::protocol::xproto;
 
-const ESC_KEYSYM: u32 = 0xff1b;
 
-/// Since MOD_MASK_ANY is apparently bug-ridden, we instead exploit the fact
-/// that the modifier masks NONE to MOD_MASK_5 are 0, 1, 2, 4, 8, ... 128.
-/// Then we grab on every possible combination of these masks by iterating
-/// through all the integers 0 to 255. This allows us to grab Esc, Shift+Esc,
-/// CapsLock+Shift+Esc, or any other combination.
-const KEY_GRAB_MASK_MAX: u16 = (xproto::ModMask::M5 as u16 * 2) - 1;
 
 #[derive(Clone, Copy)]
 pub struct HacksawContainer {
@@ -69,58 +62,15 @@ pub fn set_shape<C: Connection>(conn: &C, window: xproto::Window, rects: &[xprot
 }
 
 pub fn set_title<C: Connection>(conn: &C, window: xproto::Window, title: &str) {
-    xproto::change_property(
-        conn,
-        xproto::PropMode::Replace,
-        window,
-        xproto::AtomEnum::WM_NAME,
-        xproto::AtomEnum::STRING,
-        8,
-        title.len() as u32,
-        title.as_bytes(),
-    )
-    .unwrap()
-    .check()
-    .unwrap();
 }
 
 pub fn grab_pointer_set_cursor<C: Connection>(conn: &C, root: u32) -> bool {
 }
 
 pub fn find_escape_keycode<C: Connection>(conn: &C) -> xproto::Keycode {
-    // https://stackoverflow.com/questions/18689863/obtain-keyboard-layout-and-keysyms-with-xcb
-    let setup = conn.setup();
-    let cookie = xproto::get_keyboard_mapping(
-        conn,
-        setup.min_keycode,
-        setup.max_keycode - setup.min_keycode + 1,
-    )
-    .unwrap();
-    let reply = cookie.reply().expect("failed to get keyboard mapping");
-
-    let escape_index = reply
-        .keysyms
-        .iter()
-        .position(|&keysym| keysym == ESC_KEYSYM)
-        .expect("failed to find escape keysym");
-    (escape_index / reply.keysyms_per_keycode as usize) as u8 + setup.min_keycode
 }
 
 pub fn grab_key<C: Connection>(conn: &C, root: u32, keycode: u8) {
-    for mask in 0..=KEY_GRAB_MASK_MAX {
-        xproto::grab_key(
-            conn,
-            true,
-            root,
-            mask,
-            keycode,
-            xproto::GrabMode::Async,
-            xproto::GrabMode::Async,
-        )
-        .unwrap()
-        .check()
-        .unwrap();
-    }
 }
 
 pub fn ungrab_key<C: Connection>(conn: &C, root: u32, keycode: u8) {
