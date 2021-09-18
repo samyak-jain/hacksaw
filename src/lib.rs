@@ -1,4 +1,6 @@
 mod util;
+mod errors;
+mod x11;
 
 use util::{
     find_escape_keycode, get_window_at_point, get_window_geom, grab_key, grab_pointer_set_cursor,
@@ -48,7 +50,7 @@ impl Default for HackSawConfig {
         Self {
             line_width: 1,
             guide_width: Some(1),
-            line_colour: util::parse_args::parse_hex("#7f7f7f").unwrap(),
+            line_colour: util::parse_hex("#7f7f7f").unwrap(),
             remove_decorations: 0,
         }
     }
@@ -62,6 +64,22 @@ pub struct HackSawResult {
     pub height: u16,
     pub x: i16,
     pub y: i16,
+}
+
+pub fn get_screen() -> Result<HackSawResult, String> {
+    let (conn, screen_num) = x11rb::rust_connection::RustConnection::connect(None).unwrap();
+    let setup = conn.setup();
+    let screen = &setup.roots[screen_num];
+
+    let window = conn.generate_id().unwrap();
+
+    return Ok(HackSawResult {
+        window,
+        x: 0,
+        y: 0,
+        width: screen.width_in_pixels,
+        height: screen.height_in_pixels,
+    })
 }
 
 pub fn make_selection(config: Option<HackSawConfig>) -> Result<HackSawResult, String> {

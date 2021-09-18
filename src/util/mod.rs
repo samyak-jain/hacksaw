@@ -1,11 +1,7 @@
-pub mod parse_args;
-pub mod parse_format;
-
 use x11rb::connection::Connection;
 use x11rb::protocol::shape;
 use x11rb::protocol::xproto;
 
-pub const CURSOR_GRAB_TRIES: i32 = 5;
 const ESC_KEYSYM: u32 = 0xff1b;
 
 /// Since MOD_MASK_ANY is apparently bug-ridden, we instead exploit the fact
@@ -89,47 +85,6 @@ pub fn set_title<C: Connection>(conn: &C, window: xproto::Window, title: &str) {
 }
 
 pub fn grab_pointer_set_cursor<C: Connection>(conn: &C, root: u32) -> bool {
-    let font = conn.generate_id().unwrap();
-    xproto::open_font(conn, font, b"cursor")
-        .unwrap()
-        .check()
-        .unwrap();
-
-    // TODO: create cursor with a Pixmap
-    // https://stackoverflow.com/questions/40578969/how-to-create-a-cursor-in-x11-from-raw-data-c
-    let cursor = conn.generate_id().unwrap();
-    xproto::create_glyph_cursor(conn, cursor, font, font, 0, 30, 0, 0, 0, 0, 0, 0)
-        .unwrap()
-        .check()
-        .unwrap();
-
-    for i in 0..CURSOR_GRAB_TRIES {
-        let reply = xproto::grab_pointer(
-            conn,
-            true,
-            root,
-            (xproto::EventMask::ButtonRelease
-                | xproto::EventMask::ButtonPress
-                | xproto::EventMask::ButtonMotion
-                | xproto::EventMask::PointerMotion) as u16,
-            xproto::GrabMode::Async,
-            xproto::GrabMode::Async,
-            x11rb::NONE,
-            cursor,
-            x11rb::CURRENT_TIME,
-        )
-        .unwrap()
-        .reply()
-        .unwrap();
-
-        if reply.status == xproto::GrabStatus::Success {
-            return true;
-        } else if i < CURSOR_GRAB_TRIES - 1 {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        }
-    }
-
-    false
 }
 
 pub fn find_escape_keycode<C: Connection>(conn: &C) -> xproto::Keycode {
@@ -248,3 +203,4 @@ pub fn get_window_at_point<C: Connection>(
 
     Some(window)
 }
+
