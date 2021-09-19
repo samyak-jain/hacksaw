@@ -46,19 +46,6 @@ impl HacksawContainer {
 }
 
 pub fn set_shape<C: Connection>(conn: &C, window: xproto::Window, rects: &[xproto::Rectangle]) {
-    shape::rectangles(
-        conn,
-        shape::SO::Set,
-        shape::SK::Bounding,
-        xproto::ClipOrdering::Unsorted,
-        window,
-        0,
-        0,
-        &rects,
-    )
-    .unwrap()
-    .check()
-    .unwrap();
 }
 
 pub fn set_title<C: Connection>(conn: &C, window: xproto::Window, title: &str) {
@@ -74,12 +61,6 @@ pub fn grab_key<C: Connection>(conn: &C, root: u32, keycode: u8) {
 }
 
 pub fn ungrab_key<C: Connection>(conn: &C, root: u32, keycode: u8) {
-    for mask in 0..=KEY_GRAB_MASK_MAX {
-        xproto::ungrab_key(conn, keycode, root, mask)
-            .unwrap()
-            .check()
-            .unwrap();
-    }
 }
 
 fn viewable<C: Connection>(conn: &C, win: xproto::Window) -> bool {

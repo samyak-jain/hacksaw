@@ -49,6 +49,7 @@ impl From<ReplyError> for KeyboardError {
     }
 }
 
+#[derive(Debug)]
 pub enum GenericConnectionError {
    ConnectionError(ConnectionError),
    NotFound,

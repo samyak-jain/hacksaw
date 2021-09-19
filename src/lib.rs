@@ -1,11 +1,14 @@
-mod util;
 mod errors;
+mod util;
 mod x11;
+
+use std::convert::TryFrom;
 
 use util::{
     find_escape_keycode, get_window_at_point, get_window_geom, grab_key, grab_pointer_set_cursor,
     set_shape, set_title, ungrab_key, HacksawContainer, CURSOR_GRAB_TRIES,
 };
+use x11::Guides;
 use x11rb::connection::Connection;
 use x11rb::protocol::{xproto, Event};
 
@@ -56,7 +59,6 @@ impl Default for HackSawConfig {
     }
 }
 
-
 #[derive(Debug)]
 pub struct HackSawResult {
     pub window: u32,
@@ -79,7 +81,7 @@ pub fn get_screen() -> Result<HackSawResult, String> {
         y: 0,
         width: screen.width_in_pixels,
         height: screen.height_in_pixels,
-    })
+    });
 }
 
 pub fn make_selection(config: Option<HackSawConfig>) -> Result<HackSawResult, String> {
@@ -101,36 +103,33 @@ pub fn make_selection(config: Option<HackSawConfig>) -> Result<HackSawResult, St
 
     conn.create_window(opt.line_colour);
 
-    set_shape(
-        &conn,
-        window,
-        &[xproto::Rectangle {
-            x: 0,
-            y: 0,
-            width: 0,
-            height: 0,
-        }],
-    );
-
-    xproto::map_window(&conn, window).unwrap().check().unwrap();
+    // set_shape(
+    //     &conn,
+    //     window,
+    //     &[xproto::Rectangle {
+    //         x: 0,
+    //         y: 0,
+    //         width: 0,
+    //         height: 0,
+    //     }],
+    // );
 
     if let Some(guide_width) = opt.guide_width {
-        let pointer = xproto::query_pointer(&conn, root).unwrap().reply().unwrap();
-        set_shape(
-            &conn,
-            window,
-            &build_guides(
-                screen_rect,
+        let pointer = conn.get_pointer().unwrap();
+        conn.make_guides(
+            Guides::try_from((
+                conn.screen,
                 xproto::Point {
                     x: pointer.root_x,
                     y: pointer.root_y,
                 },
                 guide_width,
-            ),
+            ))
+            .unwrap(),
         );
     }
 
-    conn.flush().unwrap();
+    conn.conn.flush().unwrap();
 
     let mut start_pt = xproto::Point { x: 0, y: 0 };
     let mut selection = xproto::Rectangle {
@@ -146,6 +145,7 @@ pub fn make_selection(config: Option<HackSawConfig>) -> Result<HackSawResult, St
     // TODO draw rectangle around window under cursor
     loop {
         let ev = conn
+            .conn
             .wait_for_event()
             .map_err(|_| "Error getting X event, quitting.".to_string())?;
 
@@ -155,8 +155,9 @@ pub fn make_selection(config: Option<HackSawConfig>) -> Result<HackSawResult, St
                 if detail == 3 {
                     return Err("Exiting due to right click".into());
                 } else {
-                    set_shape(&conn, window, &[]);
-                    conn.flush().unwrap();
+                    conn.make_guides((&[] as &[xproto::Rectangle]).into());
+                    conn.conn.flush().unwrap();
+
                     start_pt = xproto::Point {
                         x: button_press.event_x,
                         y: button_press.event_y,
@@ -224,7 +225,7 @@ pub fn make_selection(config: Option<HackSawConfig>) -> Result<HackSawResult, St
                         },
                     ];
 
-                    set_shape(&conn, window, &rects);
+                    conn.make_guides((&rects).into());
                 } else if let Some(guide_width) = opt.guide_width {
                     let rects = build_guides(
                         screen_rect,
@@ -235,7 +236,10 @@ pub fn make_selection(config: Option<HackSawConfig>) -> Result<HackSawResult, St
                         guide_width,
                     );
 
-                    set_shape(&conn, window, &rects);
+                    conn.make_guides((conn.screen, xproto::Point {
+                        x: motion.event_x,
+                        y: motion.event_y,
+                    }, guide_width));
                 }
 
                 conn.flush().unwrap();
@@ -256,19 +260,10 @@ pub fn make_selection(config: Option<HackSawConfig>) -> Result<HackSawResult, St
         };
     }
 
-    xproto::ungrab_pointer(&conn, x11rb::CURRENT_TIME)
-        .unwrap()
-        .check()
-        .unwrap();
-    ungrab_key(&conn, root, escape_keycode);
-    xproto::unmap_window(&conn, window)
-        .unwrap()
-        .check()
-        .unwrap();
-    xproto::destroy_window(&conn, window)
-        .unwrap()
-        .check()
-        .unwrap();
+    conn.destory_window().unwrap();
+    conn.ungrab_cursor().unwrap();
+
+    conn.ungrab_key(conn.get_escape_keycode()).unwrap();
     conn.flush().unwrap();
 
     loop {
@@ -299,7 +294,7 @@ pub fn make_selection(config: Option<HackSawConfig>) -> Result<HackSawResult, St
         };
     }
 
-    Ok(HackSawResult{
+    Ok(HackSawResult {
         window: result.window,
         height: result.height(),
         width: result.width(),

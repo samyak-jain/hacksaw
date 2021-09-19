@@ -1,8 +1,11 @@
 use crate::errors::{GenericConnectionError, GrabError, KeyboardError};
-use std::convert::TryFrom;
+use std::{convert::TryFrom, num::TryFromIntError, ops::Deref};
 use x11rb::{
     connection::Connection,
-    protocol::xproto::{self, Screen},
+    protocol::{
+        shape,
+        xproto::{self, QueryPointerReply, Screen},
+    },
 };
 
 pub const CURSOR_GRAB_TRIES: i32 = 5;
@@ -16,9 +19,54 @@ const ESC_KEYSYM: u32 = 0xff1b;
 const KEY_GRAB_MASK_MAX: u16 = (u16::from(xproto::ModMask::M5) * 2) - 1;
 
 pub struct X11Connection<'a> {
-    conn: x11rb::rust_connection::RustConnection,
-    screen: &'a Screen,
+    pub conn: x11rb::rust_connection::RustConnection,
+    pub screen: &'a Screen,
     window: u32,
+}
+
+impl<'a> Deref for X11Connection<'a> {
+    type Target = &'a x11rb::rust_connection::RustConnection;
+
+    fn deref(&self) -> &'a Self::Target {
+        &self.conn
+    }
+}
+
+impl Drop for X11Connection<'_> {
+    fn drop(&mut self) {}
+}
+
+pub struct Guides<'a, const SIZE: usize> {
+    rects: &'a [xproto::Rectangle; SIZE],
+}
+
+impl<'a, const SIZE: usize> From<&'a [xproto::Rectangle; SIZE]> for Guides<'a, SIZE> {
+    fn from(val: &'a [xproto::Rectangle; SIZE]) -> Self {
+        Self { rects: val }
+    }
+}
+
+impl TryFrom<(&Screen, xproto::Point, u16)> for Guides<'_, 2> {
+    type Error = TryFromIntError;
+
+    fn try_from(guide_values: (&Screen, xproto::Point, u16)) -> Result<Self, Self::Error> {
+        Ok(Self {
+            rects: &[
+                xproto::Rectangle {
+                    x: guide_values.1.x - i16::try_from(guide_values.2)? / 2,
+                    y: 0,
+                    width: guide_values.2,
+                    height: guide_values.0.height_in_pixels,
+                },
+                xproto::Rectangle {
+                    x: 0,
+                    y: guide_values.1.y - i16::try_from(guide_values.2)? / 2,
+                    width: guide_values.0.width_in_pixels,
+                    height: guide_values.2,
+                },
+            ],
+        })
+    }
 }
 
 pub fn new_connection<'a>() -> X11Connection<'a> {
@@ -76,6 +124,10 @@ impl X11Connection<'_> {
         return Err(GrabError::TooManyRetriesError);
     }
 
+    pub fn ungrab_cursor(&self) -> Result<(), GenericConnectionError> {
+        xproto::ungrab_pointer(&self.conn, x11rb::CURRENT_TIME)?.check()?;
+    }
+
     pub fn get_escape_keycode(&self) -> Result<xproto::Keycode, KeyboardError> {
         // https://stackoverflow.com/questions/18689863/obtain-keyboard-layout-and-keysyms-with-xcb
         let setup = self.conn.setup();
@@ -110,6 +162,14 @@ impl X11Connection<'_> {
                 xproto::GrabMode::ASYNC,
             )?
             .check()?;
+        }
+
+        Ok(())
+    }
+
+    pub fn ungrab_key(&self, keycode: xproto::Keycode) -> Result<(), GenericConnectionError> {
+        for mask in 0..=KEY_GRAB_MASK_MAX {
+            xproto::ungrab_key(&self.conn, keycode, self.window.root, mask)?.check()?;
         }
 
         Ok(())
@@ -153,6 +213,32 @@ impl X11Connection<'_> {
             8,
             title.len() as u32,
             title.as_bytes(),
+        )?
+        .check()?;
+
+        xproto::map_window(&self.conn, self.window)?.check()?;
+        Ok(())
+    }
+
+    pub fn destory_window(&self) -> Result<(), GenericConnectionError> {
+        xproto::unmap_window(&self.conn, self.window)?.check()?;
+        xproto::destroy_window(&self.conn, self.window)?.check()?;
+    }
+
+    pub fn get_pointer(&self) -> Result<QueryPointerReply, GenericConnectionError> {
+        Ok(xproto::query_pointer(&self.conn, self.screen.root)?.reply()?)
+    }
+
+    pub fn make_guides(&self, guides: Guides) -> Result<(), GenericConnectionError> {
+        shape::rectangles(
+            &self.conn,
+            shape::SO::SET,
+            shape::SK::BOUNDING,
+            xproto::ClipOrdering::UNSORTED,
+            self.window,
+            0,
+            0,
+            &guides.rects,
         )?
         .check()?;
 
