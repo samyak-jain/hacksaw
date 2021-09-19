@@ -85,13 +85,6 @@ pub fn make_selection(config: Option<HackSawConfig>) -> Result<HackSawResult, St
     conn.grab_cursor();
     conn.grab_key(conn.get_escape_keycode().unwrap());
 
-    let screen_rect = xproto::Rectangle {
-        x: 0,
-        y: 0,
-        width: screen.width_in_pixels,
-        height: screen.height_in_pixels,
-    };
-
     conn.create_window(opt.line_colour);
 
     // set_shape(
@@ -120,7 +113,7 @@ pub fn make_selection(config: Option<HackSawConfig>) -> Result<HackSawResult, St
         );
     }
 
-    conn.conn.flush().unwrap();
+    conn.flush().unwrap();
 
     let mut start_pt = xproto::Point { x: 0, y: 0 };
     let mut selection = xproto::Rectangle {
@@ -146,7 +139,7 @@ pub fn make_selection(config: Option<HackSawConfig>) -> Result<HackSawResult, St
                 if detail == 3 {
                     return Err("Exiting due to right click".into());
                 } else {
-                    conn.make_guides((&[] as &[xproto::Rectangle]).into());
+                    conn.make_guides((&[] as &[xproto::Rectangle; 0]).into());
                     conn.conn.flush().unwrap();
 
                     start_pt = xproto::Point {
@@ -254,7 +247,7 @@ pub fn make_selection(config: Option<HackSawConfig>) -> Result<HackSawResult, St
     conn.destory_window().unwrap();
     conn.ungrab_cursor().unwrap();
 
-    conn.ungrab_key(conn.get_escape_keycode()).unwrap();
+    conn.ungrab_key(conn.get_escape_keycode()?).unwrap();
     conn.flush().unwrap();
 
     loop {

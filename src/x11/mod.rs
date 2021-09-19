@@ -233,6 +233,8 @@ impl X11Connection<'_> {
     pub fn destory_window(&self) -> Result<(), GenericConnectionError> {
         xproto::unmap_window(&self.conn, self.window)?.check()?;
         xproto::destroy_window(&self.conn, self.window)?.check()?;
+
+        Ok(())
     }
 
     pub fn get_pointer(&self) -> Result<QueryPointerReply, GenericConnectionError> {
@@ -324,7 +326,16 @@ impl X11Connection<'_> {
 
                 return Ok(window);
             }
-            SelectionType::SelectFullScreen => todo!(),
+            SelectionType::SelectFullScreen => {
+                let geom = xproto::get_geometry(&self.conn, self.window)?.reply()?;
+                return Ok(HackSawResult {
+                    height: geom.height,
+                    width: geom.width,
+                    window: self.window,
+                    x: 0,
+                    y: 0,
+                });
+            }
         }
     }
 }
