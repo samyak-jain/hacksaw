@@ -59,15 +59,6 @@ impl Default for HackSawConfig {
     }
 }
 
-#[derive(Debug)]
-pub struct HackSawResult {
-    pub window: u32,
-    pub width: u16,
-    pub height: u16,
-    pub x: i16,
-    pub y: i16,
-}
-
 pub fn get_screen() -> Result<HackSawResult, String> {
     let (conn, screen_num) = x11rb::rust_connection::RustConnection::connect(None).unwrap();
     let setup = conn.setup();

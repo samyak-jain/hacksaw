@@ -28,6 +28,7 @@ impl From<ReplyError> for GrabError {
     }
 }
 
+#[derive(Debug)]
 pub enum KeyboardError {
    ConnectionError(ConnectionError),
    NotFound,
@@ -52,7 +53,6 @@ impl From<ReplyError> for KeyboardError {
 #[derive(Debug)]
 pub enum GenericConnectionError {
    ConnectionError(ConnectionError),
-   NotFound,
    Misc(X11Error)
 }
 
@@ -63,6 +63,27 @@ impl From<ConnectionError> for GenericConnectionError {
 }
 
 impl From<ReplyError> for GenericConnectionError {
+    fn from(e: ReplyError) -> Self {
+        match e {
+            ReplyError::ConnectionError(err) => Self::ConnectionError(err),
+            ReplyError::X11Error(err) => Self::Misc(err),
+        }
+    }
+}
+
+pub enum WindowSelectError {
+   ConnectionError(ConnectionError),
+   Misc(X11Error),
+   NotFound
+}
+
+impl From<ConnectionError> for WindowSelectError {
+    fn from(e: ConnectionError) -> Self {
+        Self::ConnectionError(e)
+    }
+}
+
+impl From<ReplyError> for WindowSelectError {
     fn from(e: ReplyError) -> Self {
         match e {
             ReplyError::ConnectionError(err) => Self::ConnectionError(err),

@@ -25,24 +25,10 @@ impl HacksawContainer {
     }
 
     pub fn relative_to(&self, parent: HacksawContainer) -> HacksawContainer {
-        HacksawContainer {
-            window: self.window,
-            rect: xproto::Rectangle {
-                x: parent.x() + self.x(),
-                y: parent.y() + self.y(),
-                width: self.width(),
-                height: self.height(),
-            },
-        }
     }
 
     fn contains(&self, point: xproto::Point) -> bool {
-        // TODO negative x/y offsets from bottom or right?
-        self.x() < point.x
-            && self.y() < point.y
-            && point.x - self.x() <= self.width() as i16
-            && point.y - self.y() <= self.height() as i16
-    }
+          }
 }
 
 pub fn set_shape<C: Connection>(conn: &C, window: xproto::Window, rects: &[xproto::Rectangle]) {
@@ -64,19 +50,9 @@ pub fn ungrab_key<C: Connection>(conn: &C, root: u32, keycode: u8) {
 }
 
 fn viewable<C: Connection>(conn: &C, win: xproto::Window) -> bool {
-    let attrs = xproto::get_window_attributes(conn, win)
-        .unwrap()
-        .reply()
-        .unwrap();
-    attrs.map_state == xproto::MapState::Viewable
 }
 
 pub fn input_output<C: Connection>(conn: &C, win: xproto::Window) -> bool {
-    let attrs = xproto::get_window_attributes(conn, win)
-        .unwrap()
-        .reply()
-        .unwrap();
-    attrs.class == xproto::WindowClass::InputOutput
 }
 
 pub fn get_window_geom<C: Connection>(conn: &C, win: xproto::Window) -> HacksawContainer {
@@ -99,39 +75,5 @@ pub fn get_window_at_point<C: Connection>(
     pt: xproto::Point,
     remove_decorations: u32,
 ) -> Option<HacksawContainer> {
-    let tree = xproto::query_tree(conn, win).unwrap().reply().unwrap();
-    let children = tree
-        .children
-        .iter()
-        .filter(|&child| viewable(conn, *child))
-        .filter(|&child| input_output(conn, *child))
-        .filter_map(|&child| {
-            let geom = get_window_geom(conn, child);
-            if geom.contains(pt) {
-                Some(geom)
-            } else {
-                None
-            }
-        })
-        .collect::<Vec<_>>();
-
-    if children.is_empty() {
-        return None;
-    }
-
-    let mut window = children[children.len() - 1];
-    for _ in 0..remove_decorations {
-        let tree = xproto::query_tree(conn, window.window)
-            .unwrap()
-            .reply()
-            .unwrap();
-        if tree.children.is_empty() {
-            break;
-        }
-        let firstborn = tree.children[0];
-        window = get_window_geom(conn, firstborn).relative_to(window);
-    }
-
-    Some(window)
 }
 
